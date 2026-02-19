@@ -62,4 +62,13 @@ router.get('/cart/:cid', async (req, res) => {
     )
 });
 
+router.get("/forgot-password", (req, res) => {
+    res.render("forgot-password"); 
+});
+
+router.get("/reset-password", (req, res) => {
+    const { token } = req.query;
+    res.render("reset-password", { token }); 
+});
+
 export default router;

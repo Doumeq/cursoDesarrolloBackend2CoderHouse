@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import UserModel from "../dao/models/userModel.js";
 import CartModel from "../dao/models/cartModel.js";
 import { hashPassword, comparePassword } from "../utils/hash.js";
+import UserDTO from "../dto/UserDTO.js";
 
 dotenv.config();
 const router = Router();
@@ -71,11 +72,64 @@ router.post("/login", async (req, res, next) => {
 router.get(
   "/current",
   passport.authenticate("jwt", { session: false }),
-  (req, res) => res.json({ status: "success", payload: req.user })
+  (req, res) => {
+    const userDTO = new UserDTO(req.user);
+
+    res.json({ status: "success", payload: userDTO });
+  }
 );
 
 router.post("/logout", (req, res) => {
   res.clearCookie(COOKIE).json({ status: "success", message: "Sesión cerrada" });
+});
+
+router.post("/forgot-password", async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await UserModel.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ status: "error", error: "Usuario no encontrado" });
+        }
+
+        const token = jwt.sign({ email }, process.env.JWT_SECRET, { expiresIn: "1h" });
+
+        await sendRecoveryMail(email, token);
+        
+        res.json({ status: "success", message: "Correo de recuperación enviado con éxito." });
+    } catch (error) {
+        res.status(500).json({ status: "error", error: error.message });
+    }
+});
+
+router.post("/reset-password", async (req, res) => {
+    try {
+        const { token, newPassword } = req.body;
+        
+        if (!token || !newPassword) {
+            return res.status(400).json({ status: "error", error: "Faltan datos (token o nueva contraseña)" });
+        }
+
+        let decoded;
+        try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
+        } catch (error) {
+            return res.status(401).json({ status: "error", error: "El enlace es inválido o ha expirado. Solicita uno nuevo." });
+        }
+
+        const user = await UserModel.findOne({ email: decoded.email });
+        if (!user) return res.status(404).json({ status: "error", error: "Usuario no encontrado" });
+
+        if (comparePassword(newPassword, user.password)) {
+            return res.status(400).json({ status: "error", error: "No puedes usar la misma contraseña que ya tenías." });
+        }
+
+        user.password = hashPassword(newPassword);
+        await user.save();
+
+        res.json({ status: "success", message: "Contraseña actualizada correctamente. Ya puedes iniciar sesión." });
+    } catch (error) {
+        res.status(500).json({ status: "error", error: error.message });
+    }
 });
 
 export default router;

@@ -118,4 +118,11 @@ router.delete('/:cid', async (req, res) => {
     }
 });
 
+router.post(
+    "/:cid/purchase",
+    passport.authenticate("jwt", { session: false }),
+    authorization(["USER"]), 
+    cartController.purchaseCart
+);
+
 export default router;
